@@ -7,18 +7,8 @@ interface LoginPageProps {
   onEmployeeCreated?: (employee: Employee) => void;
 }
 
-// Seed Users for Authentication
+// Seed Users for Authentication (Management Accounts)
 export const SYSTEM_USERS: (User & { passwordHash: string })[] = [
-  {
-    id: 'usr-emp-001',
-    username: 'kamal',
-    passwordHash: 'emp123',
-    role: 'EMPLOYEE',
-    fullName: 'Kamal Perera',
-    email: 'kamal@cnwengineering.lk',
-    phone: '+94771234567',
-    isActive: true,
-  },
   {
     id: 'usr-hr-001',
     username: 'hrmanager',
@@ -54,9 +44,9 @@ export const SYSTEM_USERS: (User & { passwordHash: string })[] = [
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onEmployeeCreated }) => {
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
 
-  // Login Form State
-  const [username, setUsername] = useState<string>('kamal');
-  const [password, setPassword] = useState<string>('emp123');
+  // Login Form State (Clean empty inputs)
+  const [username, setUsername] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [rememberMe, setRememberMe] = useState<boolean>(true);
 
@@ -209,12 +199,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onEmployee
     onLoginSuccess(newUser);
   };
 
-  const handleQuickFill = (u: string, p: string) => {
-    setUsername(u);
-    setPassword(p);
-    setError(null);
-  };
-
   return (
     <div className="min-h-screen bg-[#02353C] flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200">
@@ -314,43 +298,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onEmployee
               <LogIn className="w-5 h-5 text-[#3FD0C9]" />
               <span>Sign In / ඇතුල් වන්න</span>
             </button>
-
-            {/* Development Quick Role Fill */}
-            <div className="pt-3 border-t border-slate-100">
-              <p className="text-[11px] text-slate-400 font-semibold text-center mb-2">
-                Select Demo Account to Auto-Fill:
-              </p>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('kamal', 'emp123')}
-                  className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-left font-bold text-slate-700"
-                >
-                  👷 Employee (Kamal)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('hrmanager', 'hr123')}
-                  className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-left font-bold text-slate-700"
-                >
-                  💼 HR Manager
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('ceo', 'ceo123')}
-                  className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-left font-bold text-slate-700"
-                >
-                  🏢 CEO (Mr. Jayantha)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('admin', 'admin123')}
-                  className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-left font-bold text-slate-700"
-                >
-                  🛡️ System Admin
-                </button>
-              </div>
-            </div>
           </form>
         )}
 

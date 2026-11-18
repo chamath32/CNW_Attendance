@@ -3,46 +3,19 @@ import { User, Employee, Site, AttendanceEvent } from './types';
 import { EmployeeDashboard } from './components/EmployeeDashboard';
 import { ManagementDashboard } from './components/ManagementDashboard';
 import { LoginPage } from './components/LoginPage';
-import { apiFetchAttendance, apiRecordAttendance, getLocalAttendanceEvents, saveLocalAttendanceEvents } from './lib/api';
+import {
+  apiFetchAttendance,
+  apiRecordAttendance,
+  apiFetchEmployees,
+  apiFetchSites,
+  getLocalAttendanceEvents,
+  saveLocalAttendanceEvents,
+} from './lib/api';
 import { LogOut, KeyRound } from 'lucide-react';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 
-// Seed Initial Data for Development & Testing
-const INITIAL_EMPLOYEES: Employee[] = [
-  {
-    id: 'emp-001',
-    userId: 'usr-emp-001',
-    employeeCode: 'CNW-E001',
-    fullName: 'Kamal Perera',
-    callingName: 'Kamal',
-    designation: 'Senior Mason',
-    currentDailyRate: 2000,
-    currentOtRate: 300,
-    isActive: true,
-  },
-  {
-    id: 'emp-002',
-    userId: 'usr-emp-002',
-    employeeCode: 'CNW-E002',
-    fullName: 'Nimal Silva',
-    callingName: 'Nimal',
-    designation: 'Lead Carpenter',
-    currentDailyRate: 2200,
-    currentOtRate: 350,
-    isActive: true,
-  },
-  {
-    id: 'emp-003',
-    userId: 'usr-emp-003',
-    employeeCode: 'CNW-E003',
-    fullName: 'Sunil Jayawardena',
-    callingName: 'Sunil',
-    designation: 'Construction Technician',
-    currentDailyRate: 2500,
-    currentOtRate: 400,
-    isActive: true,
-  },
-];
+// Initial Empty Employees list (strictly managed via Sign-Up & HR Manager)
+const INITIAL_EMPLOYEES: Employee[] = [];
 
 const INITIAL_SITES: Site[] = [
   {
@@ -71,12 +44,30 @@ const INITIAL_SITES: Site[] = [
 export function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
-  const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES);
-  const [sites, setSites] = useState<Site[]>(INITIAL_SITES);
+  const [employees, setEmployees] = useState<Employee[]>(() => {
+    try {
+      const saved = localStorage.getItem('cnw_employees_list');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_EMPLOYEES;
+  });
+  const [sites, setSites] = useState<Site[]>(() => {
+    try {
+      const saved = localStorage.getItem('cnw_sites_list');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_SITES;
+  });
   // Start with locally stored events or empty array - NO hardcoded dummy events
   const [attendanceEvents, setAttendanceEvents] = useState<AttendanceEvent[]>(() => getLocalAttendanceEvents());
 
-  // Restore authenticated session and sync attendance from API on mount
+  // Restore authenticated session and sync attendance, employees, and sites on mount
   useEffect(() => {
     const saved = localStorage.getItem('cnw_active_session') || sessionStorage.getItem('cnw_active_session');
     if (saved) {
@@ -94,6 +85,22 @@ export function App() {
     apiFetchAttendance().then((events) => {
       if (events && events.length > 0) {
         setAttendanceEvents(events);
+      }
+    });
+
+    // Load employees from Cloudflare D1 / API
+    apiFetchEmployees().then((apiEmps) => {
+      if (apiEmps && apiEmps.length > 0) {
+        setEmployees(apiEmps);
+        localStorage.setItem('cnw_employees_list', JSON.stringify(apiEmps));
+      }
+    });
+
+    // Load sites from Cloudflare D1 / API
+    apiFetchSites().then((apiSites) => {
+      if (apiSites && apiSites.length > 0) {
+        setSites(apiSites);
+        localStorage.setItem('cnw_sites_list', JSON.stringify(apiSites));
       }
     });
   }, []);
@@ -141,24 +148,48 @@ export function App() {
 
   // CRUD for Employees
   const handleAddEmployee = (emp: Employee) => {
-    setEmployees((prev) => [...prev, emp]);
+    setEmployees((prev) => {
+      const updated = [...prev, emp];
+      localStorage.setItem('cnw_employees_list', JSON.stringify(updated));
+      return updated;
+    });
   };
   const handleUpdateEmployee = (emp: Employee) => {
-    setEmployees((prev) => prev.map((e) => (e.id === emp.id ? emp : e)));
+    setEmployees((prev) => {
+      const updated = prev.map((e) => (e.id === emp.id ? emp : e));
+      localStorage.setItem('cnw_employees_list', JSON.stringify(updated));
+      return updated;
+    });
   };
   const handleDeleteEmployee = (empId: string) => {
-    setEmployees((prev) => prev.filter((e) => e.id !== empId));
+    setEmployees((prev) => {
+      const updated = prev.filter((e) => e.id !== empId);
+      localStorage.setItem('cnw_employees_list', JSON.stringify(updated));
+      return updated;
+    });
   };
 
   // CRUD for Sites
   const handleAddSite = (site: Site) => {
-    setSites((prev) => [...prev, site]);
+    setSites((prev) => {
+      const updated = [...prev, site];
+      localStorage.setItem('cnw_sites_list', JSON.stringify(updated));
+      return updated;
+    });
   };
   const handleUpdateSite = (site: Site) => {
-    setSites((prev) => prev.map((s) => (s.id === site.id ? site : s)));
+    setSites((prev) => {
+      const updated = prev.map((s) => (s.id === site.id ? site : s));
+      localStorage.setItem('cnw_sites_list', JSON.stringify(updated));
+      return updated;
+    });
   };
   const handleDeleteSite = (siteId: string) => {
-    setSites((prev) => prev.filter((s) => s.id !== siteId));
+    setSites((prev) => {
+      const updated = prev.filter((s) => s.id !== siteId);
+      localStorage.setItem('cnw_sites_list', JSON.stringify(updated));
+      return updated;
+    });
   };
 
   // If not logged in, show Login Screen
@@ -166,7 +197,7 @@ export function App() {
     return (
       <LoginPage
         onLoginSuccess={(user) => setCurrentUser(user)}
-        onEmployeeCreated={(newEmp) => setEmployees((prev) => [...prev, newEmp])}
+        onEmployeeCreated={(newEmp) => handleAddEmployee(newEmp)}
       />
     );
   }
@@ -176,8 +207,19 @@ export function App() {
   if (currentUser.role === 'EMPLOYEE') {
     const activeEmployee =
       employees.find((e) => e.userId === currentUser.id) ||
-      employees.find((e) => e.employeeCode === 'CNW-E001') ||
-      employees[0];
+      employees.find((e) => e.fullName.toLowerCase() === currentUser.fullName.toLowerCase()) ||
+      employees[0] ||
+      {
+        id: `emp-${currentUser.id}`,
+        userId: currentUser.id,
+        employeeCode: 'CNW-EMP',
+        fullName: currentUser.fullName,
+        callingName: currentUser.fullName.split(' ')[0],
+        designation: 'Site Worker',
+        currentDailyRate: 2000,
+        currentOtRate: 300,
+        isActive: true,
+      };
 
     return (
       <EmployeeDashboard
