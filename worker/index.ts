@@ -23,6 +23,7 @@ export interface Env {
   TIMEZONE: string;
   UNPAID_BREAK_MINUTES: string;
   NORMAL_WORK_HOURS: string;
+  GOOGLE_SHEET_WEBHOOK_URL?: string;
 }
 
 export default {
@@ -123,6 +124,15 @@ export default {
           body.adjustmentReason || null,
           body.createdUserId || 'usr-emp-001'
         ).run();
+
+        // Dispatch to Google Sheet Webhook if configured
+        if (env.GOOGLE_SHEET_WEBHOOK_URL) {
+          fetch(env.GOOGLE_SHEET_WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          }).catch(() => {});
+        }
 
         return new Response(
           JSON.stringify({ success: true, serverTimestamp: serverTime }),

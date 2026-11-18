@@ -2,6 +2,7 @@ import { AttendanceEvent, Site, Employee } from '../types';
 
 const STORAGE_KEY_EVENTS = 'cnw_attendance_events';
 const STORAGE_KEY_GSHEET_WEBHOOK = 'cnw_google_sheet_webhook';
+export const DEFAULT_GSHEET_WEBHOOK = 'https://script.google.com/macros/s/AKfycbwIRPDJSyqDH3vHOMgi-EvwxhG54bOuteKmPWFUvKuZ-vs0m_OPES-wT2xkaSVKlWLNhg/exec';
 
 /**
  * Map raw database row (snake_case) or frontend object (camelCase) to AttendanceEvent
@@ -59,7 +60,7 @@ export async function syncToGoogleSheet(
   employeeName?: string,
   siteName?: string
 ): Promise<void> {
-  const webhookUrl = localStorage.getItem(STORAGE_KEY_GSHEET_WEBHOOK);
+  const webhookUrl = localStorage.getItem(STORAGE_KEY_GSHEET_WEBHOOK) || DEFAULT_GSHEET_WEBHOOK;
   if (!webhookUrl) return;
 
   try {

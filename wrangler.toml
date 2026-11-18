@@ -9,6 +9,7 @@ UNPAID_BREAK_MINUTES = "60"
 NORMAL_WORK_HOURS = "8"
 COMPANY_EMAIL = "cnweng.hr@gmail.com"
 GOOGLE_SHEET_ID = "1AFXJ4m4aws1-s9mUbdf_UxrMmN_4xyJJIjo17RikV1c"
+GOOGLE_SHEET_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbwIRPDJSyqDH3vHOMgi-EvwxhG54bOuteKmPWFUvKuZ-vs0m_OPES-wT2xkaSVKlWLNhg/exec"
 
 # Cloudflare D1 Database Binding
 [[d1_databases]]

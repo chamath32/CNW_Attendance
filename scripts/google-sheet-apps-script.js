@@ -20,6 +20,12 @@
  * - Formats headers with CNW Dark Green (#02353C) and bold white text.
  */
 
+// Handle GET requests (e.g. testing the Web App URL in browser)
+function doGet(e) {
+  return ContentService.createTextOutput("CNW Workforce Google Sheet Webhook is active and running!")
+    .setMimeType(ContentService.MimeType.TEXT);
+}
+
 function doPost(e) {
   try {
     var contents = e.postData ? e.postData.contents : "{}";
