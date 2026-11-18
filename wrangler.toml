@@ -1,0 +1,23 @@
+name = "cnw-workforce-api"
+main = "worker/index.ts"
+compatibility_date = "2024-04-05"
+
+[vars]
+ENVIRONMENT = "development"
+TIMEZONE = "Asia/Colombo"
+UNPAID_BREAK_MINUTES = "60"
+NORMAL_WORK_HOURS = "8"
+COMPANY_EMAIL = "cnweng.hr@gmail.com"
+GOOGLE_SHEET_ID = "1AFXJ4m4aws1-s9mUbdf_UxrMmN_4xyJJIjo17RikV1c"
+
+# Cloudflare D1 Database Binding
+[[d1_databases]]
+binding = "DB"
+database_name = "cnw-workforce-db"
+database_id = "5e48a71b-96ff-4bf0-a819-408a2e774eff"
+migrations_dir = "migrations"
+
+# Static assets serving (Cloudflare Pages or Workers Assets)
+[assets]
+directory = "./dist"
+binding = "ASSETS"
