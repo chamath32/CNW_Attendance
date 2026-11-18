@@ -1,16 +1,20 @@
 /**
  * CNW WORKFORCE — MATRIX-STYLE MONTHLY GOOGLE APPS SCRIPT WEBHOOK
  * 
- * SPREADSHEET STRUCTURE:
- * - Each tab represents one Month: "YYYY-MM" (e.g., "2026-11", "2026-12")
- * - Rows 3 to 33: Each row represents one Date of the month (Day 1 to 31).
- * - Columns A & B: Date and Day of Week.
- * - Columns C onward: Each employee gets a Main Column with 4 Sub-columns:
- *     1. START at
- *     2. OFF at
- *     3. Site
- *     4. Total Working Hours
- * - If a new employee logs in, it automatically creates a new 4-column group!
+ * SPECIFICATIONS:
+ * 1. Each tab represents one Month: "YYYY-MM" (e.g. "2026-11", "2026-12")
+ * 2. Main Column: Employee Full Name (e.g. "Kamal Perera")
+ * 3. Sub-columns:
+ *    - Start at: Green (#2EAF7D)
+ *    - OFF at: Light Red (#F87171)
+ *    - Site: Light Blue (#60A5FA)
+ *    - Total Hours: Light Orange (#FB923C)
+ * 4. Data Alignment: All attendance data right-aligned.
+ * 5. Total Hours Format: "Total(OT)" e.g. 10(2) means 10 total paid hours with 2 OT hours.
+ * 6. Rows after Row 33 (Monthly Summary):
+ *    - Row 35: Total Working Hours
+ *    - Row 36: Total OT Hours
+ *    - Row 37: Total Salary (LKR)
  */
 
 function doGet(e) {
@@ -24,68 +28,70 @@ function doPost(e) {
     var data = JSON.parse(contents);
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-    // Determine Event Date in Sri Lanka timezone
+    // Determine Event Date in Sri Lanka timezone (Asia/Colombo)
     var eventDateStr = data.effectiveEventTime || new Date().toISOString();
     var eventDate = new Date(eventDateStr);
     
-    // YYYY-MM tab name
+    // Tab name formatted as YYYY-MM
     var yearMonth = Utilities.formatDate(eventDate, "Asia/Colombo", "yyyy-MM");
     var dayOfMonth = parseInt(Utilities.formatDate(eventDate, "Asia/Colombo", "d"), 10);
     var formattedTime = Utilities.formatDate(eventDate, "Asia/Colombo", "hh:mm a");
 
-    // Employee and Site identifiers
-    var empName = data.employeeName || data.employeeId || "Employee";
-    var empCode = data.employeeCode || "";
-    var empLabel = empCode ? (empName + " (" + empCode + ")") : empName;
-    var siteName = data.siteName || data.siteId || "";
+    // Display employee full name as Main Header (e.g. "Kamal Perera")
+    var empName = data.employeeName || data.fullName || "Kamal Perera";
+    var siteName = data.siteName || "CNW Site";
     var eventType = (data.eventType || "").toUpperCase();
 
     // Check or create monthly sheet tab
     var sheet = ss.getSheetByName(yearMonth);
     if (!sheet) {
-      sheet = initializeMonthlySheet(ss, yearMonth, eventDate);
+      sheet = initializeMonthlySheet(ss, yearMonth);
     }
 
-    // Locate or create the 4-column block for this employee
-    var colStart = getOrCreateEmployeeColumns(sheet, empLabel);
+    // Locate or create the 4-column group for this employee
+    var colStart = getOrCreateEmployeeColumns(sheet, empName);
 
-    // Target row for this day of the month: Row = 2 + dayOfMonth
+    // Target row for this day of the month (Days 1 to 31 are Rows 3 to 33)
     var targetRow = 2 + dayOfMonth;
 
     // Sub-columns:
-    // colStart: START
-    // colStart + 1: OFF
-    // colStart + 2: SITE
-    // colStart + 3: TOTAL HOURS
+    // colStart: START at
+    // colStart + 1: OFF at
+    // colStart + 2: Site
+    // colStart + 3: Total Hours
     var startCell = sheet.getRange(targetRow, colStart);
     var offCell = sheet.getRange(targetRow, colStart + 1);
     var siteCell = sheet.getRange(targetRow, colStart + 2);
     var hoursCell = sheet.getRange(targetRow, colStart + 3);
 
     if (eventType === "START") {
-      startCell.setValue(formattedTime);
-      siteCell.setValue(siteName);
+      startCell.setValue(formattedTime).setHorizontalAlignment("right");
+      siteCell.setValue(siteName).setHorizontalAlignment("right");
     } else if (eventType === "MOVE") {
       var currentSite = siteCell.getValue();
-      siteCell.setValue(currentSite ? (currentSite + " -> " + siteName) : siteName);
+      siteCell.setValue(currentSite ? (currentSite + " -> " + siteName) : siteName).setHorizontalAlignment("right");
     } else if (eventType === "OFF") {
-      offCell.setValue(formattedTime);
+      offCell.setValue(formattedTime).setHorizontalAlignment("right");
       if (!siteCell.getValue()) {
-        siteCell.setValue(siteName);
+        siteCell.setValue(siteName).setHorizontalAlignment("right");
       }
       
-      // Calculate working hours if start time exists
+      // Calculate formatted hours string: Total(OT) e.g. 10(2)
       var startVal = startCell.getValue();
       if (startVal) {
-        hoursCell.setValue(calculateWorkedHours(startVal.toString(), formattedTime));
+        var hourStats = calculateWorkedHoursStats(startVal.toString(), formattedTime);
+        hoursCell.setValue(hourStats.displayStr).setHorizontalAlignment("right");
       }
+
+      // Recompute Monthly Summary Totals for this employee (Rows 35, 36, 37)
+      recalculateEmployeeMonthlySummary(sheet, colStart, data.dailyRate || 2000, data.otRate || 300);
     }
 
     return ContentService.createTextOutput(JSON.stringify({ 
       status: "success", 
       sheet: yearMonth, 
       day: dayOfMonth, 
-      employee: empLabel 
+      employee: empName 
     })).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
@@ -94,12 +100,12 @@ function doPost(e) {
 }
 
 /**
- * Initialize a new monthly sheet with Date rows (1 to 31)
+ * Initialize a new monthly sheet with Date rows (1 to 31) and Summary rows (35 to 37)
  */
-function initializeMonthlySheet(ss, yearMonth, dateInMonth) {
+function initializeMonthlySheet(ss, yearMonth) {
   var sheet = ss.insertSheet(yearMonth);
   
-  // Header Row 1 & 2 for Date & Day
+  // Date & Day Header (Row 1 & 2 merged)
   sheet.getRange(1, 1, 2, 1).merge().setValue("Date").setBackground("#02353C").setFontColor("#FFFFFF").setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle");
   sheet.getRange(1, 2, 2, 1).merge().setValue("Day").setBackground("#02353C").setFontColor("#FFFFFF").setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle");
   
@@ -108,7 +114,7 @@ function initializeMonthlySheet(ss, yearMonth, dateInMonth) {
   sheet.setFrozenColumns(2);
   sheet.setFrozenRows(2);
 
-  // Determine days in this month
+  // Determine days in this month (28 to 31)
   var parts = yearMonth.split("-");
   var year = parseInt(parts[0], 10);
   var month = parseInt(parts[1], 10);
@@ -116,7 +122,7 @@ function initializeMonthlySheet(ss, yearMonth, dateInMonth) {
 
   var dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-  // Populate Days 1 to daysInMonth
+  // Populate Days 1 to daysInMonth (Rows 3 to 2 + daysInMonth)
   var dateRows = [];
   for (var d = 1; d <= daysInMonth; d++) {
     var curDate = new Date(year, month - 1, d);
@@ -125,66 +131,101 @@ function initializeMonthlySheet(ss, yearMonth, dateInMonth) {
     dateRows.push([dateString, dayOfWeek]);
   }
 
-  sheet.getRange(3, 1, daysInMonth, 2).setValues(dateRows);
+  var dateRange = sheet.getRange(3, 1, daysInMonth, 2);
+  dateRange.setValues(dateRows);
+  dateRange.setHorizontalAlignment("center");
 
-  // Alternate row shading for readability
-  for (var r = 3; r < 3 + daysInMonth; r++) {
+  // Alternate row shading for days 1 to 31
+  for (var r = 3; r <= 2 + daysInMonth; r++) {
     if (r % 2 === 0) {
       sheet.getRange(r, 1, 1, 2).setBackground("#F8FAFC");
     }
   }
 
+  // Row 34: Separator
+  sheet.getRange(34, 1, 1, 2).merge().setValue("").setBackground("#E2E8F0");
+
+  // Summary Labels in Columns A & B: Rows 35, 36, 37
+  var summaryLabels = [
+    ["Total Working Hours", ""],
+    ["Total Overtime (OT) Hours", ""],
+    ["Total Estimated Salary (LKR)", ""]
+  ];
+  var sumRange = sheet.getRange(35, 1, 3, 2);
+  sumRange.setValues(summaryLabels);
+  sheet.getRange(35, 1, 1, 2).merge().setBackground("#02353C").setFontColor("#FFFFFF").setFontWeight("bold").setHorizontalAlignment("right");
+  sheet.getRange(36, 1, 1, 2).merge().setBackground("#02353C").setFontColor("#FFFFFF").setFontWeight("bold").setHorizontalAlignment("right");
+  sheet.getRange(37, 1, 1, 2).merge().setBackground("#02353C").setFontColor("#C1F6ED").setFontWeight("bold").setHorizontalAlignment("right");
+
   return sheet;
 }
 
 /**
- * Find or append a 4-column group for an employee
+ * Find or append a 4-column block for an employee with custom colors & right alignment
  */
-function getOrCreateEmployeeColumns(sheet, empLabel) {
+function getOrCreateEmployeeColumns(sheet, empName) {
   var lastCol = sheet.getLastColumn();
   
   // Search existing employees in Row 1 (starting from Column 3)
   if (lastCol >= 3) {
     var row1Values = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
     for (var c = 2; c < lastCol; c += 4) {
-      if (row1Values[c] && row1Values[c].toString().trim() === empLabel.trim()) {
+      if (row1Values[c] && row1Values[c].toString().trim().toLowerCase() === empName.trim().toLowerCase()) {
         return c + 1; // 1-based column index
       }
     }
   }
 
-  // Employee not found -> append new 4-column block
+  // Employee not found -> append new 4-column group
   var newCol = Math.max(3, lastCol + 1);
 
-  // Main Header (Row 1): Employee Name merged across 4 sub-columns
+  // Main Header (Row 1): Employee Full Name merged across 4 sub-columns
   sheet.getRange(1, newCol, 1, 4).merge()
-    .setValue(empLabel)
+    .setValue(empName)
     .setBackground("#02353C")
     .setFontColor("#FFFFFF")
     .setFontWeight("bold")
     .setHorizontalAlignment("center");
 
-  // Sub-Headers (Row 2): START, OFF, Site, Total Hours
-  var subHeaders = [["Start at", "OFF at", "Site", "Total Hours"]];
-  sheet.getRange(2, newCol, 1, 4).setValues(subHeaders)
-    .setBackground("#2EAF7D")
-    .setFontColor("#FFFFFF")
-    .setFontWeight("bold")
-    .setHorizontalAlignment("center");
+  // Sub-Headers (Row 2) with requested colors:
+  // 1. Start at: Green (#2EAF7D)
+  // 2. OFF at: Light Red (#F87171)
+  // 3. Site: Light Blue (#60A5FA)
+  // 4. Total Hours: Light Orange (#FB923C)
+  var headers = [["Start at", "OFF at", "Site", "Total Hours"]];
+  var subHeaderRange = sheet.getRange(2, newCol, 1, 4);
+  subHeaderRange.setValues(headers);
+  subHeaderRange.setFontColor("#FFFFFF");
+  subHeaderRange.setFontWeight("bold");
+  subHeaderRange.setHorizontalAlignment("center");
 
-  // Format column widths
+  sheet.getRange(2, newCol).setBackground("#2EAF7D");     // Green
+  sheet.getRange(2, newCol + 1).setBackground("#F87171"); // Light Red
+  sheet.getRange(2, newCol + 2).setBackground("#60A5FA"); // Light Blue
+  sheet.getRange(2, newCol + 3).setBackground("#FB923C"); // Light Orange
+
+  // Column Widths
   sheet.setColumnWidth(newCol, 95);     // Start
   sheet.setColumnWidth(newCol + 1, 95); // Off
-  sheet.setColumnWidth(newCol + 2, 130);// Site
-  sheet.setColumnWidth(newCol + 3, 90); // Hours
+  sheet.setColumnWidth(newCol + 2, 140);// Site
+  sheet.setColumnWidth(newCol + 3, 105);// Total Hours
+
+  // Right-align all data rows for this employee
+  sheet.getRange(3, newCol, 31, 4).setHorizontalAlignment("right");
+
+  // Summary cells styling (Rows 35, 36, 37)
+  sheet.getRange(34, newCol, 1, 4).setBackground("#E2E8F0");
+  sheet.getRange(35, newCol, 1, 4).setBackground("#F8FAFC").setHorizontalAlignment("right").setFontWeight("bold");
+  sheet.getRange(36, newCol, 1, 4).setBackground("#F8FAFC").setHorizontalAlignment("right").setFontWeight("bold");
+  sheet.getRange(37, newCol, 1, 4).setBackground("#ECFDF5").setHorizontalAlignment("right").setFontWeight("bold").setFontColor("#065F46");
 
   return newCol;
 }
 
 /**
- * Approximate elapsed hours between two "hh:mm a" time strings
+ * Calculate working hours and format as "Total(OT)" e.g. "10(2)"
  */
-function calculateWorkedHours(startStr, offStr) {
+function calculateWorkedHoursStats(startStr, offStr) {
   try {
     var parseTime = function(tStr) {
       var match = tStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
@@ -199,14 +240,62 @@ function calculateWorkedHours(startStr, offStr) {
 
     var s = parseTime(startStr);
     var o = parseTime(offStr);
-    if (s === null || o === null) return "";
+    if (s === null || o === null) return { totalPaid: 0, otHours: 0, displayStr: "" };
 
-    var diff = o - s;
-    if (diff < 0) diff += 24; // Handled midnight crossing
-    // Deduct 1 hour lunch break if worked > 5 hours
-    var paid = diff > 5.0 ? Math.max(0, diff - 1.0) : diff;
-    return Math.round(paid * 10) / 10 + " hrs";
+    var elapsed = o - s;
+    if (elapsed < 0) elapsed += 24; // Handled midnight rollover
+
+    // Deduct 1 hr lunch break if worked > 5 hours
+    var paid = elapsed > 5.0 ? Math.max(0, elapsed - 1.0) : elapsed;
+    paid = Math.round(paid * 10) / 10;
+
+    // Overtime is hours in excess of 8 standard hours
+    var ot = Math.max(0, paid - 8.0);
+    ot = Math.round(ot * 10) / 10;
+
+    // Format strictly as Total(OT) e.g. 10(2)
+    var display = paid + "(" + ot + ")";
+    return { totalPaid: paid, otHours: ot, displayStr: display };
   } catch (e) {
-    return "";
+    return { totalPaid: 0, otHours: 0, displayStr: "" };
   }
+}
+
+/**
+ * Recompute Monthly Summary Totals for an employee (Rows 35, 36, 37)
+ */
+function recalculateEmployeeMonthlySummary(sheet, colStart, dailyRate, otRate) {
+  try {
+    var hoursCol = colStart + 3; // 4th sub-column
+    var values = sheet.getRange(3, hoursCol, 31, 1).getValues();
+
+    var sumTotalPaid = 0;
+    var sumOT = 0;
+    var daysWorked = 0;
+
+    for (var i = 0; i < values.length; i++) {
+      var cellVal = values[i][0] ? values[i][0].toString() : "";
+      var match = cellVal.match(/([\d.]+)\(([\d.]+)\)/);
+      if (match) {
+        var p = parseFloat(match[1]);
+        var o = parseFloat(match[2]);
+        sumTotalPaid += p;
+        sumOT += o;
+        daysWorked++;
+      }
+    }
+
+    sumTotalPaid = Math.round(sumTotalPaid * 10) / 10;
+    sumOT = Math.round(sumOT * 10) / 10;
+
+    // Estimated Salary = (Days Worked * Daily Rate) + (Total OT * OT Rate)
+    var totalSalary = (daysWorked * dailyRate) + (sumOT * otRate);
+
+    // Row 35: Total Working Hours
+    sheet.getRange(35, hoursCol).setValue(sumTotalPaid + " hrs");
+    // Row 36: Total OT Hours
+    sheet.getRange(36, hoursCol).setValue(sumOT + " hrs");
+    // Row 37: Total Salary
+    sheet.getRange(37, hoursCol).setValue("Rs. " + totalSalary.toLocaleString());
+  } catch (e) {}
 }

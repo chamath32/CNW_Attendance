@@ -105,8 +105,10 @@ export function App() {
   const handleAddEvent = async (event: AttendanceEvent) => {
     // 1. Immediately update UI state
     setAttendanceEvents((prev) => [...prev, event]);
-    // 2. Persist to Cloudflare Worker D1 and local cache
-    await apiRecordAttendance(event);
+    // 2. Persist to Cloudflare Worker D1 and Google Sheet
+    const emp = employees.find((e) => e.id === event.employeeId);
+    const site = sites.find((s) => s.id === event.siteId);
+    await apiRecordAttendance(event, emp?.fullName, site?.name);
   };
 
   const handleCorrectOff = async (sessionGroupId: string, newOffDate: string, newOffTime: string, reason: string) => {
@@ -129,7 +131,9 @@ export function App() {
     setAttendanceEvents(updated);
     saveLocalAttendanceEvents(updated);
     if (targetEvent) {
-      await apiRecordAttendance(targetEvent);
+      const emp = employees.find((e) => e.id === targetEvent!.employeeId);
+      const site = sites.find((s) => s.id === targetEvent!.siteId);
+      await apiRecordAttendance(targetEvent, emp?.fullName, site?.name);
     }
   };
 

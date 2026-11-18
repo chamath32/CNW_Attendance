@@ -165,11 +165,15 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         ? `sess-${Date.now()}`
         : currentStartEvent?.sessionGroupId || `sess-${Date.now()}`;
 
+    const selectedSite = sites.find((s) => s.id === selectedSiteId);
+
     const newEvent: AttendanceEvent = {
       id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       sessionGroupId,
       employeeId: employee.id,
       siteId: selectedSiteId,
+      employeeName: employee.fullName,
+      siteName: selectedSite?.name || 'CNW Site',
       eventType: activeAction,
       deviceTimestamp: nowISO,
       isOfflineCreated: !isOnline,

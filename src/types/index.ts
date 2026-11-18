@@ -42,6 +42,8 @@ export interface AttendanceEvent {
   sessionGroupId: string;
   employeeId: string;
   siteId: string;
+  employeeName?: string;
+  siteName?: string;
   eventType: EventType;
   deviceTimestamp: string;     // ISO-8601 UTC
   serverTimestamp?: string;
