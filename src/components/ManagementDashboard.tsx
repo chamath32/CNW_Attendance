@@ -16,6 +16,7 @@ import {
   Trash2,
   ExternalLink,
   Edit,
+  Download,
 } from 'lucide-react';
 
 interface ManagementDashboardProps {
@@ -213,6 +214,121 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
     link.setAttribute('download', `CNW_Payroll_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // State for Individual Employee Monthly CSV Download
+  const [selectedEmpForReport, setSelectedEmpForReport] = useState<string>(employees[0]?.id || '');
+  const [selectedMonthForReport, setSelectedMonthForReport] = useState<string>(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = (now.getMonth() + 1).toString().padStart(2, '0');
+    return `${y}-${m}`;
+  });
+
+  const handleDownloadSingleEmployeeReport = () => {
+    const emp = employees.find((e) => e.id === selectedEmpForReport) || employees[0];
+    if (!emp) return;
+
+    // Filter events for this employee in the selected month
+    const empEvents = attendanceEvents.filter(
+      (e) => e.employeeId === emp.id && e.effectiveEventTime.startsWith(selectedMonthForReport)
+    );
+
+    // Group by sessionGroupId
+    const groups: { [id: string]: AttendanceEvent[] } = {};
+    empEvents.forEach((e) => {
+      if (!groups[e.sessionGroupId]) groups[e.sessionGroupId] = [];
+      groups[e.sessionGroupId].push(e);
+    });
+
+    const rowsData: any[] = [];
+    let totPaid = 0;
+    let totOT = 0;
+    let totShortage = 0;
+    let totPay = 0;
+
+    Object.entries(groups).forEach(([groupId, evts]) => {
+      const sorted = [...evts].sort(
+        (a, b) => new Date(a.effectiveEventTime).getTime() - new Date(b.effectiveEventTime).getTime()
+      );
+      const startEvt = sorted.find((e) => e.eventType === 'START');
+      const offEvt = sorted.find((e) => e.eventType === 'OFF');
+      if (!startEvt) return;
+
+      const site = sites.find((s) => s.id === startEvt.siteId);
+      const dateStr = startEvt.effectiveEventTime.split('T')[0];
+      const dayName = new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short' });
+      const startTimeStr = new Date(startEvt.effectiveEventTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const offTimeStr = offEvt
+        ? new Date(offEvt.effectiveEventTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : 'Missing OFF';
+
+      let calc: any = null;
+      if (offEvt) {
+        try {
+          calc = calculateDailyPayroll({
+            sessionGroupId: groupId,
+            employeeId: emp.id,
+            workDate: dateStr,
+            startTime: startEvt.effectiveEventTime,
+            offTime: offEvt.effectiveEventTime,
+            dailyRate: emp.currentDailyRate,
+            otRate: emp.currentOtRate,
+            unpaidBreakHours: 1.0,
+          });
+          totPaid += calc.paidHours;
+          totOT += calc.overtimeHours;
+          totShortage += calc.shortageHours;
+          totPay += calc.netDailyPay;
+        } catch {}
+      }
+
+      rowsData.push([
+        dateStr,
+        dayName,
+        `"${site?.name || ''}"`,
+        startTimeStr,
+        offTimeStr,
+        calc?.elapsedHours ?? '-',
+        calc?.unpaidBreakHours ?? '-',
+        calc?.paidHours ?? '-',
+        calc?.regularHours ?? '-',
+        calc?.overtimeHours ?? 0,
+        calc?.shortageHours ?? 0,
+        calc?.netDailyPay ?? '-',
+        offEvt ? (calc?.overtimeHours > 0 ? 'Overtime Shift' : 'Standard Shift') : 'Incomplete (Missing OFF)',
+      ]);
+    });
+
+    // Build structured individual CSV
+    const csvLines = [
+      `"CNW ENGINEERING (PVT) LTD — INDIVIDUAL ATTENDANCE & PAYROLL REPORT"`,
+      `"Employee: ${emp.fullName} (${emp.employeeCode})"`,
+      `"Calling Name: ${emp.callingName}"`,
+      `"Designation: ${emp.designation}"`,
+      `"Daily Salary Rate: LKR ${emp.currentDailyRate.toFixed(2)}"`,
+      `"Overtime (OT) Rate: LKR ${emp.currentOtRate.toFixed(2)} / hour"`,
+      `"Billing Period: ${selectedMonthForReport}"`,
+      `""`,
+      `"Date","Day","Site Name","START Time","OFF Time","Elapsed Hours","Unpaid Break (h)","Paid Hours","Regular Hours","OT Hours","Shortage Hours","Daily Payable (LKR)","Shift Status"`,
+      ...rowsData.map((r) => r.join(',')),
+      `""`,
+      `"MONTHLY TOTALS SUMMARY:"`,
+      `"Total Days Worked",${rowsData.length}`,
+      `"Total Paid Hours",${totPaid.toFixed(2)}`,
+      `"Total Overtime (OT) Hours",${totOT.toFixed(2)}`,
+      `"Total Shortage Hours",${totShortage.toFixed(2)}`,
+      `"TOTAL NET PAYABLE (LKR)",${totPay.toFixed(2)}`,
+    ];
+
+    const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `CNW_Attendance_${emp.employeeCode}_${selectedMonthForReport}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -752,6 +868,64 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({
                   >
                     Confirm Rejection
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* SPECIAL HR OPTION: Dedicated Individual Employee Monthly CSV Download */}
+            {currentRole === 'HR_MANAGER' && (
+              <div className="pt-6 border-t border-slate-200">
+                <div className="p-5 bg-gradient-to-br from-slate-50 to-emerald-50/40 rounded-2xl border border-emerald-200/80 space-y-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-[#02353C] flex items-center gap-2">
+                      <Download className="w-4 h-4 text-[#2EAF7D]" />
+                      Download Individual Employee Monthly Attendance (Structured CSV)
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Generate and download an official attendance record containing only the selected employee's shifts, hours, and pay breakdown for any specific month.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                        Select Employee (ID / Name)
+                      </label>
+                      <select
+                        value={selectedEmpForReport}
+                        onChange={(e) => setSelectedEmpForReport(e.target.value)}
+                        className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#2EAF7D]"
+                      >
+                        {employees.map((emp) => (
+                          <option key={emp.id} value={emp.id}>
+                            {emp.fullName} ({emp.employeeCode})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                        Billing Month (YYYY-MM)
+                      </label>
+                      <input
+                        type="month"
+                        value={selectedMonthForReport}
+                        onChange={(e) => setSelectedMonthForReport(e.target.value)}
+                        className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#2EAF7D]"
+                      />
+                    </div>
+
+                    <div>
+                      <button
+                        onClick={handleDownloadSingleEmployeeReport}
+                        className="w-full py-2.5 px-4 bg-[#02353C] hover:bg-[#03444d] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all"
+                      >
+                        <Download className="w-4 h-4 text-[#3FD0C9]" />
+                        <span>Download Employee CSV</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

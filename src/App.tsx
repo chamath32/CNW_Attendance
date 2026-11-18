@@ -109,9 +109,8 @@ export function App() {
     await apiRecordAttendance(event);
   };
 
-  const handleCorrectOff = async (sessionGroupId: string, newOffTime: string, reason: string) => {
-    const today = new Date().toISOString().split('T')[0];
-    const newEffectiveISO = new Date(`${today}T${newOffTime}:00`).toISOString();
+  const handleCorrectOff = async (sessionGroupId: string, newOffDate: string, newOffTime: string, reason: string) => {
+    const newEffectiveISO = new Date(`${newOffDate}T${newOffTime}:00+05:30`).toISOString();
 
     let targetEvent: AttendanceEvent | null = null;
     const updated = attendanceEvents.map((e) => {

@@ -25,8 +25,21 @@ interface EmployeeDashboardProps {
   sites: Site[];
   events: AttendanceEvent[];
   onAddEvent: (event: AttendanceEvent) => Promise<void>;
-  onCorrectOff: (sessionGroupId: string, newOffTime: string, reason: string) => Promise<void>;
+  onCorrectOff: (sessionGroupId: string, newOffDate: string, newOffTime: string, reason: string) => Promise<void>;
   onLogout?: () => void;
+}
+
+/**
+ * Get Sri Lankan Local Date and Time
+ */
+export function getSriLankanLocalDateTime(): { dateStr: string; timeStr: string } {
+  const now = new Date();
+  const slOffsetMs = 5.5 * 60 * 60 * 1000;
+  const slDate = new Date(now.getTime() + slOffsetMs);
+  const dateStr = slDate.toISOString().split('T')[0];
+  const hours = slDate.getUTCHours().toString().padStart(2, '0');
+  const mins = slDate.getUTCMinutes().toString().padStart(2, '0');
+  return { dateStr, timeStr: `${hours}:${mins}` };
 }
 
 export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
@@ -41,15 +54,17 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
 
-  // Modal state
+  // Modal state with both Date and Time
   const [modalOpen, setModalOpen] = useState<boolean>(false);
   const [activeAction, setActiveAction] = useState<EventType>('START');
   const [selectedSiteId, setSelectedSiteId] = useState<string>(sites[0]?.id || '');
-  const [modalAutoTime, setModalAutoTime] = useState<string>('08:00');
+  const [modalAutoDate, setModalAutoDate] = useState<string>(() => getSriLankanLocalDateTime().dateStr);
+  const [modalAutoTime, setModalAutoTime] = useState<string>(() => getSriLankanLocalDateTime().timeStr);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   // OFF Correction state
   const [correctModalOpen, setCorrectModalOpen] = useState<boolean>(false);
+  const [extendOffDate, setExtendOffDate] = useState<string>(() => getSriLankanLocalDateTime().dateStr);
   const [extendOffTime, setExtendOffTime] = useState<string>('21:30');
   const [extendReason, setExtendReason] = useState<string>('Supervisor requested urgent shift overtime extension');
 
@@ -96,22 +111,15 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
     return () => clearInterval(interval);
   }, [isWorking, currentStartEvent]);
 
-  // Current live time formatted as HH:mm
-  const getLiveLocalTimeStr = () => {
-    const now = new Date();
-    const hours = now.getHours().toString().padStart(2, '0');
-    const mins = now.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${mins}`;
-  };
-
   // Handle Button Click (START, MOVING, END/OFF)
   const handleOpenActionModal = (type: EventType) => {
     setValidationError(null);
     setActiveAction(type);
 
-    // Live Sri Lankan local time calculated immediately
-    const liveTime = getLiveLocalTimeStr();
-    setModalAutoTime(liveTime);
+    // Capture exact current Sri Lankan date and time
+    const live = getSriLankanLocalDateTime();
+    setModalAutoDate(live.dateStr);
+    setModalAutoTime(live.timeStr);
 
     if (type === 'MOVE' && currentSite) {
       const otherSite = sites.find((s) => s.id !== currentSite.id) || sites[0];
@@ -123,20 +131,21 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
     setModalOpen(true);
   };
 
-  // Submit attendance from modal
+  // Submit attendance from modal with both Date and Time
   const handleConfirmAction = async (
+    effectiveDateYYYYMMDD: string,
     effectiveTimeHHMM: string,
     wasAdjusted: boolean,
     adjustmentReason?: string
   ) => {
-    const today = new Date().toISOString().split('T')[0];
-    const effectiveISO = new Date(`${today}T${effectiveTimeHHMM}:00`).toISOString();
+    // Construct local timestamp in Asia/Colombo (+05:30)
+    const effectiveISO = new Date(`${effectiveDateYYYYMMDD}T${effectiveTimeHHMM}:00+05:30`).toISOString();
     const nowISO = new Date().toISOString();
 
     // Find preceding valid OFF if starting
     const prevOff = [...employeeEvents].reverse().find((e) => e.eventType === 'OFF');
 
-    // Run client-side validation
+    // Run client-side validation using full date + time ISO
     const validation = validateAttendanceEvent({
       eventType: activeAction,
       newTimeISO: effectiveISO,
@@ -164,7 +173,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
       eventType: activeAction,
       deviceTimestamp: nowISO,
       isOfflineCreated: !isOnline,
-      rawPopulatedTime: `${today}T${modalAutoTime}:00Z`,
+      rawPopulatedTime: `${modalAutoDate}T${modalAutoTime}:00+05:30`,
       effectiveEventTime: effectiveISO,
       wasTimeAdjusted: wasAdjusted,
       adjustmentReason: wasAdjusted ? adjustmentReason : undefined,
@@ -187,7 +196,6 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
       <header className="bg-[#02353C] text-white px-5 pt-5 pb-5 rounded-b-3xl shadow-lg border-b border-[#03444d]">
         <div className="flex justify-between items-center mb-3">
           <div className="flex items-center gap-3">
-            {/* White background logo card */}
             <div className="w-12 h-12 rounded-xl bg-white p-1 flex items-center justify-center shadow-md overflow-hidden shrink-0 border border-white/20">
               <img src="/cnw-logo.jpg" alt="CNW Logo" className="w-full h-full object-contain" />
             </div>
@@ -289,7 +297,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
               </div>
             )}
 
-            {/* THREE PROMINENT BILINGUAL BUTTONS (Colors as requested) */}
+            {/* THREE PROMINENT BILINGUAL BUTTONS */}
             <div className="space-y-3.5 pt-2">
               {/* 1. START Button: GREEN */}
               <button
@@ -347,7 +355,11 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
             {!isWorking && employeeEvents.length > 0 && (
               <div className="pt-2 text-center">
                 <button
-                  onClick={() => setCorrectModalOpen(true)}
+                  onClick={() => {
+                    const live = getSriLankanLocalDateTime();
+                    setExtendOffDate(live.dateStr);
+                    setCorrectModalOpen(true);
+                  }}
                   className="text-[11px] text-slate-500 hover:text-slate-800 underline decoration-dotted transition-colors inline-flex items-center gap-1 py-1 px-2"
                 >
                   <Clock className="w-3 h-3 text-slate-400" />
@@ -373,6 +385,10 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
               <div className="space-y-2.5">
                 {[...employeeEvents].reverse().map((evt) => {
                   const site = sites.find((s) => s.id === evt.siteId);
+                  const date = new Date(evt.effectiveEventTime).toLocaleDateString([], {
+                    month: 'short',
+                    day: 'numeric',
+                  });
                   const time = new Date(evt.effectiveEventTime).toLocaleTimeString([], {
                     hour: '2-digit',
                     minute: '2-digit',
@@ -403,7 +419,10 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
                           </p>
                         )}
                       </div>
-                      <span className="text-sm font-extrabold text-[#02353C]">{time}</span>
+                      <div className="text-right">
+                        <span className="text-xs text-slate-400 block">{date}</span>
+                        <span className="text-sm font-extrabold text-[#02353C]">{time}</span>
+                      </div>
                     </div>
                   );
                 })}
@@ -486,14 +505,15 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         </button>
       </nav>
 
-      {/* Time Adjustment Modal */}
+      {/* Time Adjustment Modal with Date + Time */}
       <TimeAdjustmentModal
-        key={activeAction + modalAutoTime + (modalOpen ? '1' : '0')}
+        key={activeAction + modalAutoDate + modalAutoTime + (modalOpen ? '1' : '0')}
         isOpen={modalOpen}
         eventType={activeAction}
         sites={sites}
         selectedSiteId={selectedSiteId}
         onSelectSiteId={setSelectedSiteId}
+        autoDate={modalAutoDate}
         autoTime={modalAutoTime}
         onSubmit={handleConfirmAction}
         onCancel={() => setModalOpen(false)}
@@ -507,18 +527,31 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
               Extend / Adjust Last OFF Record
             </h3>
             <p className="text-xs text-slate-500">
-              If supervisor requested you to continue working after your initial OFF tap, update the effective finish time:
+              If supervisor requested you to continue working after your initial OFF tap, update the effective finish date and time:
             </p>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                New Effective Finish Time
-              </label>
-              <input
-                type="time"
-                value={extendOffTime}
-                onChange={(e) => setExtendOffTime(e.target.value)}
-                className="w-full text-xl font-bold p-2.5 bg-slate-50 border border-slate-300 rounded-xl"
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Finish Date
+                </label>
+                <input
+                  type="date"
+                  value={extendOffDate}
+                  onChange={(e) => setExtendOffDate(e.target.value)}
+                  className="w-full text-sm font-bold p-2.5 bg-slate-50 border border-slate-300 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Finish Time
+                </label>
+                <input
+                  type="time"
+                  value={extendOffTime}
+                  onChange={(e) => setExtendOffTime(e.target.value)}
+                  className="w-full text-sm font-bold p-2.5 bg-slate-50 border border-slate-300 rounded-xl"
+                />
+              </div>
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">
@@ -542,7 +575,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
                 onClick={async () => {
                   const lastOff = [...employeeEvents].reverse().find((e) => e.eventType === 'OFF');
                   if (lastOff) {
-                    await onCorrectOff(lastOff.sessionGroupId, extendOffTime, extendReason);
+                    await onCorrectOff(lastOff.sessionGroupId, extendOffDate, extendOffTime, extendReason);
                   }
                   setCorrectModalOpen(false);
                 }}

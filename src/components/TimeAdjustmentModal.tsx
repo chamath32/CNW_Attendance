@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { EventType, Site } from '../types';
-import { Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Clock, Calendar, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface TimeAdjustmentModalProps {
   isOpen: boolean;
@@ -8,8 +8,9 @@ interface TimeAdjustmentModalProps {
   sites: Site[];
   selectedSiteId: string;
   onSelectSiteId: (siteId: string) => void;
+  autoDate: string; // YYYY-MM-DD
   autoTime: string; // HH:mm format
-  onSubmit: (effectiveTimeHHMM: string, wasAdjusted: boolean, reason?: string) => void;
+  onSubmit: (effectiveDateYYYYMMDD: string, effectiveTimeHHMM: string, wasAdjusted: boolean, reason?: string) => void;
   onCancel: () => void;
 }
 
@@ -19,26 +20,29 @@ export const TimeAdjustmentModal: React.FC<TimeAdjustmentModalProps> = ({
   sites,
   selectedSiteId,
   onSelectSiteId,
+  autoDate,
   autoTime,
   onSubmit,
   onCancel,
 }) => {
+  const [inputDate, setInputDate] = useState<string>(autoDate);
   const [inputTime, setInputTime] = useState<string>(autoTime);
   const [reason, setReason] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
 
-  // Synchronize inputTime whenever modal opens or autoTime changes
+  // Synchronize inputDate and inputTime whenever modal opens or auto values change
   useEffect(() => {
     if (isOpen) {
+      setInputDate(autoDate);
       setInputTime(autoTime);
       setReason('');
       setError(null);
     }
-  }, [isOpen, autoTime]);
+  }, [isOpen, autoDate, autoTime]);
 
   if (!isOpen) return null;
 
-  const isAdjusted = inputTime !== autoTime;
+  const isAdjusted = inputDate !== autoDate || inputTime !== autoTime;
 
   const getTitle = () => {
     switch (eventType) {
@@ -47,7 +51,7 @@ export const TimeAdjustmentModal: React.FC<TimeAdjustmentModalProps> = ({
       case 'MOVE':
         return { en: 'Confirm Site MOVE', si: 'ස්ථාන මාරුව තහවුරු කරන්න', bg: 'bg-[#8B5CF6]' };
       case 'OFF':
-        return { en: 'Confirm END / OFF Work', si: 'වැඩ අවසන් කිරීම තහවුරු කරන්න', bg: 'bg-[#EF4444]' };
+        return { en: 'Confirm END / OFF Work', si: 'වැඩ අවසන් කිරීම තහවුරු කරන්න', bg: 'bg-[#F87171]' };
     }
   };
 
@@ -55,14 +59,18 @@ export const TimeAdjustmentModal: React.FC<TimeAdjustmentModalProps> = ({
 
   const handleConfirm = () => {
     setError(null);
-    // Reason is only required if the user actually changed the auto-filled live time
+    if (!inputDate || !inputTime) {
+      setError('Please provide both date and time.');
+      return;
+    }
+
     if (isAdjusted) {
       if (!reason || reason.trim().length < 3) {
         setError('Please provide a reason for changing the auto-filled time (e.g. "Forgot to tap at 5 PM").');
         return;
       }
     }
-    onSubmit(inputTime, isAdjusted, isAdjusted ? reason.trim() : undefined);
+    onSubmit(inputDate, inputTime, isAdjusted, isAdjusted ? reason.trim() : undefined);
   };
 
   return (
@@ -74,7 +82,7 @@ export const TimeAdjustmentModal: React.FC<TimeAdjustmentModalProps> = ({
           <p className="sinhala-text text-sm text-white/90 mt-0.5 font-bold">{title.si}</p>
         </div>
 
-        <div className="p-6 space-y-5">
+        <div className="p-6 space-y-4">
           {/* Site selection for START and MOVE */}
           {(eventType === 'START' || eventType === 'MOVE') && (
             <div>
@@ -84,7 +92,7 @@ export const TimeAdjustmentModal: React.FC<TimeAdjustmentModalProps> = ({
               <select
                 value={selectedSiteId}
                 onChange={(e) => onSelectSiteId(e.target.value)}
-                className="w-full p-3.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-800 focus:ring-2 focus:ring-[#2EAF7D] focus:outline-none"
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-800 focus:ring-2 focus:ring-[#2EAF7D] focus:outline-none text-sm"
               >
                 {sites.map((site) => (
                   <option key={site.id} value={site.id}>
@@ -95,12 +103,12 @@ export const TimeAdjustmentModal: React.FC<TimeAdjustmentModalProps> = ({
             </div>
           )}
 
-          {/* Time auto-fill & edit */}
+          {/* Date & Time fields */}
           <div>
             <div className="flex justify-between items-center mb-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-slate-500" />
-                Event Time / වේලාව
+                Date & Time / දිනය සහ වේලාව
               </label>
               {isAdjusted ? (
                 <span className="text-xs font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-300">
@@ -113,20 +121,42 @@ export const TimeAdjustmentModal: React.FC<TimeAdjustmentModalProps> = ({
               )}
             </div>
 
-            <input
-              type="time"
-              value={inputTime}
-              onChange={(e) => setInputTime(e.target.value)}
-              className={`w-full text-3xl font-black text-center tracking-wider p-3 bg-slate-50 border-2 rounded-xl focus:outline-none transition-colors ${
-                isAdjusted ? 'border-amber-400 text-amber-900 bg-amber-50/40' : 'border-slate-300 text-[#02353C]'
-              }`}
-            />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5 flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-slate-400" /> Date (දිනය)
+                </label>
+                <input
+                  type="date"
+                  value={inputDate}
+                  onChange={(e) => setInputDate(e.target.value)}
+                  className={`w-full text-sm font-bold p-2.5 bg-slate-50 border-2 rounded-xl focus:outline-none transition-colors ${
+                    isAdjusted ? 'border-amber-400 text-amber-900' : 'border-slate-300 text-[#02353C]'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5 flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-slate-400" /> Time (වේලාව)
+                </label>
+                <input
+                  type="time"
+                  value={inputTime}
+                  onChange={(e) => setInputTime(e.target.value)}
+                  className={`w-full text-sm font-bold p-2.5 bg-slate-50 border-2 rounded-xl focus:outline-none transition-colors ${
+                    isAdjusted ? 'border-amber-400 text-amber-900' : 'border-slate-300 text-[#02353C]'
+                  }`}
+                />
+              </div>
+            </div>
+
             <p className="text-[11px] text-slate-500 mt-1 text-center">
               Sri Lankan Local Time (Asia/Colombo)
             </p>
           </div>
 
-          {/* Correction Reason: Faded / Disabled when current time is kept; Active only if changed */}
+          {/* Correction Reason: Faded when current time is kept; Active only if changed */}
           <div
             className={`p-3.5 rounded-xl border transition-all ${
               isAdjusted
@@ -170,7 +200,7 @@ export const TimeAdjustmentModal: React.FC<TimeAdjustmentModalProps> = ({
           )}
 
           {/* Action buttons */}
-          <div className="grid grid-cols-2 gap-3 pt-2">
+          <div className="grid grid-cols-2 gap-3 pt-1">
             <button
               type="button"
               onClick={onCancel}
