@@ -73,11 +73,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onEmployee
     e.preventDefault();
     setError(null);
 
-    // Check seed users or local registered users
+    // Check seed users, registered users, and custom updated passwords
+    const customPasswords: Record<string, string> = JSON.parse(
+      localStorage.getItem('cnw_custom_passwords') || '{}'
+    );
     const registeredUsers: (User & { passwordHash: string })[] = JSON.parse(
       localStorage.getItem('cnw_registered_users') || '[]'
     );
-    const allUsers = [...SYSTEM_USERS, ...registeredUsers];
+    const allUsers = [...SYSTEM_USERS, ...registeredUsers].map((u) => {
+      const lower = u.username.toLowerCase();
+      if (customPasswords[lower]) {
+        return { ...u, passwordHash: customPasswords[lower] };
+      }
+      return u;
+    });
 
     const user = allUsers.find(
       (u) => u.username.toLowerCase() === username.trim().toLowerCase() && u.passwordHash === password

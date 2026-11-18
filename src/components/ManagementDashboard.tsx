@@ -17,6 +17,7 @@ import {
   ExternalLink,
   Edit,
   Download,
+  KeyRound,
 } from 'lucide-react';
 
 interface ManagementDashboardProps {
@@ -30,6 +31,7 @@ interface ManagementDashboardProps {
   onAddSite?: (site: Site) => void;
   onUpdateSite?: (site: Site) => void;
   onDeleteSite?: (siteId: string) => void;
+  onChangePassword?: () => void;
   onLogout?: () => void;
 }
 
@@ -44,6 +46,7 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({
   onAddSite,
   onUpdateSite,
   onDeleteSite,
+  onChangePassword,
   onLogout,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'employees' | 'payroll' | 'audit'>('overview');
@@ -391,6 +394,17 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({
                 </button>
               )}
             </div>
+
+            {onChangePassword && (
+              <button
+                onClick={onChangePassword}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-[#02353C]/10 text-slate-700 hover:text-[#02353C] font-bold text-xs rounded-xl border border-slate-200 transition-colors"
+                title="Change Account Password"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-[#02353C]" />
+                <span className="hidden sm:inline">Password</span>
+              </button>
+            )}
 
             {onLogout && (
               <button

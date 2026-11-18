@@ -4,7 +4,8 @@ import { EmployeeDashboard } from './components/EmployeeDashboard';
 import { ManagementDashboard } from './components/ManagementDashboard';
 import { LoginPage } from './components/LoginPage';
 import { apiFetchAttendance, apiRecordAttendance, getLocalAttendanceEvents, saveLocalAttendanceEvents } from './lib/api';
-import { LogOut } from 'lucide-react';
+import { LogOut, KeyRound } from 'lucide-react';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 
 // Seed Initial Data for Development & Testing
 const INITIAL_EMPLOYEES: Employee[] = [
@@ -69,6 +70,7 @@ const INITIAL_SITES: Site[] = [
 
 export function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES);
   const [sites, setSites] = useState<Site[]>(INITIAL_SITES);
   // Start with locally stored events or empty array - NO hardcoded dummy events
@@ -202,13 +204,25 @@ export function App() {
           </span>
         </div>
 
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-1.5 px-3 py-1 bg-white/10 hover:bg-rose-500/20 text-slate-300 hover:text-rose-300 rounded-lg text-xs font-semibold transition-colors"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          <span>Sign Out</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsChangePasswordOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1 bg-white/10 hover:bg-white/20 text-[#C1F6ED] rounded-lg text-xs font-semibold transition-colors"
+            title="Change your account password"
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            <span>Change Password</span>
+          </button>
+
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 px-3 py-1 bg-white/10 hover:bg-rose-500/20 text-slate-300 hover:text-rose-300 rounded-lg text-xs font-semibold transition-colors"
+            title="Sign out"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign Out</span>
+          </button>
+        </div>
       </div>
 
       {/* Management Portal */}
@@ -224,9 +238,19 @@ export function App() {
           onAddSite={handleAddSite}
           onUpdateSite={handleUpdateSite}
           onDeleteSite={handleDeleteSite}
+          onChangePassword={() => setIsChangePasswordOpen(true)}
           onLogout={handleLogout}
         />
       </div>
+
+      {/* Change Password Modal */}
+      {currentUser && (
+        <ChangePasswordModal
+          isOpen={isChangePasswordOpen}
+          currentUser={currentUser}
+          onClose={() => setIsChangePasswordOpen(false)}
+        />
+      )}
     </div>
   );
 }

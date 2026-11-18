@@ -223,6 +223,28 @@ export default {
         );
       }
 
+      // 8. Change Account Password API
+      if (path === '/api/auth/change-password' && request.method === 'POST') {
+        const body: any = await request.json();
+        const serverTime = new Date().toISOString();
+
+        if (!body.username || !body.newPassword) {
+          return new Response(
+            JSON.stringify({ error: 'Username and newPassword are required' }),
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        await env.DB.prepare(
+          'UPDATE users SET password_hash = ?, updated_at = ? WHERE LOWER(username) = LOWER(?)'
+        ).bind(body.newPassword, serverTime, body.username.trim()).run();
+
+        return new Response(
+          JSON.stringify({ success: true, message: 'Password updated successfully' }),
+          { status: 200, headers: corsHeaders }
+        );
+      }
+
       return new Response(JSON.stringify({ error: 'Endpoint not found' }), {
         status: 404,
         headers: corsHeaders,
