@@ -158,7 +158,12 @@ export function App() {
 
   // If not logged in, show Login Screen
   if (!currentUser) {
-    return <LoginPage onLoginSuccess={(user) => setCurrentUser(user)} />;
+    return (
+      <LoginPage
+        onLoginSuccess={(user) => setCurrentUser(user)}
+        onEmployeeCreated={(newEmp) => setEmployees((prev) => [...prev, newEmp])}
+      />
+    );
   }
 
   // If logged in as an EMPLOYEE:

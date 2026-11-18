@@ -172,6 +172,47 @@ export default {
         );
       }
 
+      // 7. Employee Self-Registration API
+      if (path === '/api/auth/register-employee' && request.method === 'POST') {
+        const body: any = await request.json();
+        const serverTime = new Date().toISOString();
+
+        // 1. Insert into users table
+        await env.DB.prepare(
+          `INSERT INTO users (id, username, password_hash, role, full_name, phone, is_active, created_at, updated_at)
+           VALUES (?, ?, ?, 'EMPLOYEE', ?, ?, 1, ?, ?)`
+        ).bind(
+          body.userId,
+          body.username.toLowerCase(),
+          body.password,
+          body.fullName,
+          body.phone || null,
+          serverTime,
+          serverTime
+        ).run();
+
+        // 2. Insert into employees table
+        await env.DB.prepare(
+          `INSERT INTO employees (id, user_id, employee_code, full_name, calling_name, phone, designation, current_daily_rate, current_ot_rate, is_active, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 2000.0, 300.0, 1, ?, ?)`
+        ).bind(
+          body.employeeId,
+          body.userId,
+          body.employeeCode,
+          body.fullName,
+          body.callingName,
+          body.phone || null,
+          body.designation || 'Site Worker',
+          serverTime,
+          serverTime
+        ).run();
+
+        return new Response(
+          JSON.stringify({ success: true, message: 'Employee registered successfully' }),
+          { status: 201, headers: corsHeaders }
+        );
+      }
+
       return new Response(JSON.stringify({ error: 'Endpoint not found' }), {
         status: 404,
         headers: corsHeaders,

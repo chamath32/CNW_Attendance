@@ -1,6 +1,7 @@
 import { AttendanceEvent, Site, Employee } from '../types';
 
 const STORAGE_KEY_EVENTS = 'cnw_attendance_events';
+const STORAGE_KEY_GSHEET_WEBHOOK = 'cnw_google_sheet_webhook';
 
 /**
  * Map raw database row (snake_case) or frontend object (camelCase) to AttendanceEvent
@@ -51,6 +52,39 @@ export function saveLocalAttendanceEvents(events: AttendanceEvent[]): void {
 }
 
 /**
+ * Automatically sync attendance event to Google Sheet via Webhook
+ */
+export async function syncToGoogleSheet(
+  event: AttendanceEvent,
+  employeeName?: string,
+  siteName?: string
+): Promise<void> {
+  const webhookUrl = localStorage.getItem(STORAGE_KEY_GSHEET_WEBHOOK);
+  if (!webhookUrl) return;
+
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      mode: 'no-cors', // Standard for Google Apps Script Web Apps
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: event.id,
+        employeeName: employeeName || event.employeeId,
+        employeeCode: event.employeeId,
+        siteName: siteName || event.siteId,
+        eventType: event.eventType,
+        effectiveEventTime: event.effectiveEventTime,
+        wasTimeAdjusted: event.wasTimeAdjusted,
+        adjustmentReason: event.adjustmentReason || '',
+        deviceTimestamp: event.deviceTimestamp,
+      }),
+    });
+  } catch (err) {
+    console.warn('Google Sheet automatic sync error:', err);
+  }
+}
+
+/**
  * Fetch attendance events from Cloudflare Worker API (or fallback to local storage)
  */
 export async function apiFetchAttendance(): Promise<AttendanceEvent[]> {
@@ -73,7 +107,11 @@ export async function apiFetchAttendance(): Promise<AttendanceEvent[]> {
 /**
  * Record a new attendance event to Cloudflare Worker D1 and persist locally
  */
-export async function apiRecordAttendance(event: AttendanceEvent): Promise<boolean> {
+export async function apiRecordAttendance(
+  event: AttendanceEvent,
+  employeeName?: string,
+  siteName?: string
+): Promise<boolean> {
   // 1. Immediately persist locally
   const current = getLocalAttendanceEvents();
   const existingIdx = current.findIndex((e) => e.id === event.id);
@@ -86,9 +124,9 @@ export async function apiRecordAttendance(event: AttendanceEvent): Promise<boole
   }
   saveLocalAttendanceEvents(updated);
 
-  // 2. Transmit to Cloudflare Worker API
+  // 2. Transmit to Cloudflare Worker API (D1 Database)
   try {
-    const res = await fetch('/api/attendance', {
+    fetch('/api/attendance', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -105,15 +143,15 @@ export async function apiRecordAttendance(event: AttendanceEvent): Promise<boole
         adjustmentReason: event.adjustmentReason,
         createdUserId: event.createdUserId,
       }),
-    });
-
-    if (res.ok) {
-      return true;
-    }
+    }).catch(() => {});
   } catch {
-    // Network failure or offline: stays safely preserved in local queue
+    // Network failure
   }
-  return false;
+
+  // 3. Automatically sync to Google Sheet webhook
+  syncToGoogleSheet(event, employeeName, siteName);
+
+  return true;
 }
 
 /**
