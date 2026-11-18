@@ -3,6 +3,7 @@ import { User, Employee, Site, AttendanceEvent } from './types';
 import { EmployeeDashboard } from './components/EmployeeDashboard';
 import { ManagementDashboard } from './components/ManagementDashboard';
 import { LoginPage } from './components/LoginPage';
+import { apiFetchAttendance, apiRecordAttendance, getLocalAttendanceEvents, saveLocalAttendanceEvents } from './lib/api';
 import { LogOut } from 'lucide-react';
 
 // Seed Initial Data for Development & Testing
@@ -66,60 +67,14 @@ const INITIAL_SITES: Site[] = [
   },
 ];
 
-// Initial demo attendance session
-const INITIAL_ATTENDANCE: AttendanceEvent[] = [
-  {
-    id: 'evt-init-01',
-    sessionGroupId: 'sess-demo-01',
-    employeeId: 'emp-001',
-    siteId: 'site-001',
-    eventType: 'START',
-    deviceTimestamp: '2026-11-18T08:00:00Z',
-    isOfflineCreated: false,
-    rawPopulatedTime: '2026-11-18T08:00:00Z',
-    effectiveEventTime: '2026-11-18T08:00:00Z',
-    wasTimeAdjusted: false,
-    createdUserId: 'usr-emp-001',
-    createdAt: '2026-11-18T08:00:00Z',
-  },
-  {
-    id: 'evt-init-02',
-    sessionGroupId: 'sess-demo-01',
-    employeeId: 'emp-001',
-    siteId: 'site-002',
-    eventType: 'MOVE',
-    deviceTimestamp: '2026-11-18T13:00:00Z',
-    isOfflineCreated: false,
-    rawPopulatedTime: '2026-11-18T13:00:00Z',
-    effectiveEventTime: '2026-11-18T13:00:00Z',
-    wasTimeAdjusted: false,
-    createdUserId: 'usr-emp-001',
-    createdAt: '2026-11-18T13:00:00Z',
-  },
-  {
-    id: 'evt-init-03',
-    sessionGroupId: 'sess-demo-01',
-    employeeId: 'emp-001',
-    siteId: 'site-002',
-    eventType: 'OFF',
-    deviceTimestamp: '2026-11-18T19:00:00Z',
-    isOfflineCreated: false,
-    rawPopulatedTime: '2026-11-18T19:00:00Z',
-    effectiveEventTime: '2026-11-18T19:00:00Z', // 11h elapsed - 1h break = 10h paid -> 2h OT
-    wasTimeAdjusted: true,
-    adjustmentReason: 'Extended work for site deadline',
-    createdUserId: 'usr-emp-001',
-    createdAt: '2026-11-18T19:00:00Z',
-  },
-];
-
 export function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES);
   const [sites, setSites] = useState<Site[]>(INITIAL_SITES);
-  const [attendanceEvents, setAttendanceEvents] = useState<AttendanceEvent[]>(INITIAL_ATTENDANCE);
+  // Start with locally stored events or empty array - NO hardcoded dummy events
+  const [attendanceEvents, setAttendanceEvents] = useState<AttendanceEvent[]>(() => getLocalAttendanceEvents());
 
-  // Restore authenticated session on app open
+  // Restore authenticated session and sync attendance from API on mount
   useEffect(() => {
     const saved = localStorage.getItem('cnw_active_session') || sessionStorage.getItem('cnw_active_session');
     if (saved) {
@@ -132,6 +87,13 @@ export function App() {
         localStorage.removeItem('cnw_active_session');
       }
     }
+
+    // Load attendance events from Cloudflare D1 / API
+    apiFetchAttendance().then((events) => {
+      if (events && events.length > 0) {
+        setAttendanceEvents(events);
+      }
+    });
   }, []);
 
   const handleLogout = () => {
@@ -141,26 +103,35 @@ export function App() {
   };
 
   const handleAddEvent = async (event: AttendanceEvent) => {
+    // 1. Immediately update UI state
     setAttendanceEvents((prev) => [...prev, event]);
+    // 2. Persist to Cloudflare Worker D1 and local cache
+    await apiRecordAttendance(event);
   };
 
   const handleCorrectOff = async (sessionGroupId: string, newOffTime: string, reason: string) => {
     const today = new Date().toISOString().split('T')[0];
     const newEffectiveISO = new Date(`${today}T${newOffTime}:00`).toISOString();
 
-    setAttendanceEvents((prev) =>
-      prev.map((e) => {
-        if (e.sessionGroupId === sessionGroupId && e.eventType === 'OFF') {
-          return {
-            ...e,
-            effectiveEventTime: newEffectiveISO,
-            wasTimeAdjusted: true,
-            adjustmentReason: reason,
-          };
-        }
-        return e;
-      })
-    );
+    let targetEvent: AttendanceEvent | null = null;
+    const updated = attendanceEvents.map((e) => {
+      if (e.sessionGroupId === sessionGroupId && e.eventType === 'OFF') {
+        targetEvent = {
+          ...e,
+          effectiveEventTime: newEffectiveISO,
+          wasTimeAdjusted: true,
+          adjustmentReason: reason,
+        };
+        return targetEvent;
+      }
+      return e;
+    });
+
+    setAttendanceEvents(updated);
+    saveLocalAttendanceEvents(updated);
+    if (targetEvent) {
+      await apiRecordAttendance(targetEvent);
+    }
   };
 
   // CRUD for Employees

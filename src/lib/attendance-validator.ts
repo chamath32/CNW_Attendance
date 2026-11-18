@@ -68,7 +68,7 @@ export function validateAttendanceEvent(params: ValidateEventParams): Validation
     // do not allow it to be earlier than the preceding valid OFF event.
     if (previousSessionOff) {
       const prevOffMs = new Date(previousSessionOff.effectiveEventTime).getTime();
-      if (newTimeMs < prevOffMs) {
+      if (prevOffMs <= currentTimeMs && newTimeMs < prevOffMs) {
         return {
           isValid: false,
           errorCode: 'START_BEFORE_PREV_OFF',
