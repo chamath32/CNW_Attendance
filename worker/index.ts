@@ -24,12 +24,26 @@ export interface Env {
   UNPAID_BREAK_MINUTES: string;
   NORMAL_WORK_HOURS: string;
   GOOGLE_SHEET_WEBHOOK_URL?: string;
+  ASSETS?: { fetch: (req: Request) => Promise<Response> };
 }
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
+
+    // 0. Static assets serving for SPA (HTML, CSS, JS, Images, Manifest)
+    if (!path.startsWith('/api')) {
+      if (env.ASSETS) {
+        let res = await env.ASSETS.fetch(request);
+        // Fallback to index.html for client-side SPA routing if asset not found directly
+        if (res.status === 404) {
+          const indexUrl = new URL('/', request.url);
+          res = await env.ASSETS.fetch(new Request(indexUrl, request));
+        }
+        return res;
+      }
+    }
 
     // CORS Headers for API requests
     const corsHeaders = {
@@ -243,6 +257,11 @@ export default {
           JSON.stringify({ success: true, message: 'Password updated successfully' }),
           { status: 200, headers: corsHeaders }
         );
+      }
+
+      // Fallback to static assets if non-API route was caught here
+      if (env.ASSETS) {
+        return await env.ASSETS.fetch(request);
       }
 
       return new Response(JSON.stringify({ error: 'Endpoint not found' }), {

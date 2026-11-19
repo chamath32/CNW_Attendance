@@ -123,7 +123,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
 
     if (type === 'MOVE' && currentSite) {
       const otherSite = sites.find((s) => s.id !== currentSite.id) || sites[0];
-      setSelectedSiteId(otherSite.id);
+      setSelectedSiteId(otherSite?.id || '');
     } else {
       setSelectedSiteId(currentSite?.id || sites[0]?.id || '');
     }

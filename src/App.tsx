@@ -207,14 +207,14 @@ export function App() {
   if (currentUser.role === 'EMPLOYEE') {
     const activeEmployee =
       employees.find((e) => e.userId === currentUser.id) ||
-      employees.find((e) => e.fullName.toLowerCase() === currentUser.fullName.toLowerCase()) ||
+      employees.find((e) => e.fullName?.toLowerCase() === currentUser.fullName?.toLowerCase()) ||
       employees[0] ||
       {
         id: `emp-${currentUser.id}`,
         userId: currentUser.id,
         employeeCode: 'CNW-EMP',
-        fullName: currentUser.fullName,
-        callingName: currentUser.fullName.split(' ')[0],
+        fullName: currentUser.fullName || 'Employee',
+        callingName: (currentUser.fullName || 'Employee').split(' ')[0],
         designation: 'Site Worker',
         currentDailyRate: 2000,
         currentOtRate: 300,
