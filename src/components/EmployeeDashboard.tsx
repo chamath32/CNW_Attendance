@@ -172,7 +172,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
       sessionGroupId,
       employeeId: employee.id,
       siteId: selectedSiteId,
-      employeeName: employee.fullName,
+      employeeName: employee.fullName || employee.callingName || 'Employee',
       siteName: selectedSite?.name || 'CNW Site',
       eventType: activeAction,
       deviceTimestamp: nowISO,
@@ -181,7 +181,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
       effectiveEventTime: effectiveISO,
       wasTimeAdjusted: wasAdjusted,
       adjustmentReason: wasAdjusted ? adjustmentReason : undefined,
-      createdUserId: employee.userId,
+      createdUserId: employee.userId || employee.id,
       createdAt: nowISO,
     };
 
@@ -205,10 +205,10 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
             </div>
 
             <div>
-              <h1 className="font-extrabold text-base leading-tight tracking-tight">{employee.fullName}</h1>
+              <h1 className="font-extrabold text-base leading-tight tracking-tight">{employee.fullName || employee.callingName || 'Employee'}</h1>
               <p className="text-xs text-[#C1F6ED] flex items-center gap-1 font-semibold">
                 <UserCheck className="w-3.5 h-3.5 text-[#3FD0C9]" />
-                {employee.employeeCode} &bull; {employee.designation}
+                {employee.employeeCode || 'CNW-EMP'} &bull; {employee.designation || 'Site Worker'}
               </p>
             </div>
           </div>
@@ -445,23 +445,23 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
             <div className="space-y-3 text-sm">
               <div className="flex justify-between py-2 border-b border-slate-100">
                 <span className="text-slate-500">Employee ID</span>
-                <span className="font-semibold">{employee.employeeCode}</span>
+                <span className="font-semibold">{employee.employeeCode || 'CNW-EMP'}</span>
               </div>
               <div className="flex justify-between py-2 border-b border-slate-100">
                 <span className="text-slate-500">Full Name</span>
-                <span className="font-semibold">{employee.fullName}</span>
+                <span className="font-semibold">{employee.fullName || employee.callingName || 'Employee'}</span>
               </div>
               <div className="flex justify-between py-2 border-b border-slate-100">
                 <span className="text-slate-500">Designation</span>
-                <span className="font-semibold">{employee.designation}</span>
+                <span className="font-semibold">{employee.designation || 'Site Worker'}</span>
               </div>
               <div className="flex justify-between py-2 border-b border-slate-100">
                 <span className="text-slate-500">Daily Salary Rate</span>
-                <span className="font-bold text-emerald-700">Rs. {employee.currentDailyRate.toLocaleString()}</span>
+                <span className="font-bold text-emerald-700">Rs. {(employee.currentDailyRate ?? 2000).toLocaleString()}</span>
               </div>
               <div className="flex justify-between py-2 border-b border-slate-100">
                 <span className="text-slate-500">Overtime Rate</span>
-                <span className="font-bold text-emerald-700">Rs. {employee.currentOtRate.toLocaleString()} / hr</span>
+                <span className="font-bold text-emerald-700">Rs. {(employee.currentOtRate ?? 300).toLocaleString()} / hr</span>
               </div>
             </div>
 

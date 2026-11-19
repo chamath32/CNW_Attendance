@@ -74,7 +74,7 @@ export default {
       // 2. Sites API
       if (path === '/api/sites' && request.method === 'GET') {
         const { results } = await env.DB.prepare(
-          'SELECT id, site_code, name, location, address, is_active FROM sites WHERE is_active = 1 ORDER BY name ASC'
+          'SELECT id, site_code as siteCode, name, location, address, is_active as isActive FROM sites WHERE is_active = 1 ORDER BY name ASC'
         ).all();
         return new Response(JSON.stringify(results), { headers: corsHeaders });
       }
@@ -82,7 +82,11 @@ export default {
       // 3. Employees API (Accessible by HR and CEO; Admin without salary)
       if (path === '/api/employees' && request.method === 'GET') {
         const { results } = await env.DB.prepare(
-          'SELECT id, employee_code, full_name, calling_name, nic_number, phone, designation, current_daily_rate, current_ot_rate, is_active FROM employees WHERE is_active = 1 ORDER BY employee_code ASC'
+          `SELECT id, user_id as userId, employee_code as employeeCode, full_name as fullName,
+                  calling_name as callingName, nic_number as nicNumber, phone, designation,
+                  current_daily_rate as currentDailyRate, current_ot_rate as currentOtRate,
+                  is_active as isActive
+           FROM employees WHERE is_active = 1 ORDER BY employee_code ASC`
         ).all();
         return new Response(JSON.stringify(results), { headers: corsHeaders });
       }
@@ -136,7 +140,7 @@ export default {
           body.effectiveEventTime,
           body.wasTimeAdjusted ? 1 : 0,
           body.adjustmentReason || null,
-          body.createdUserId || 'usr-emp-001'
+          body.createdUserId || body.employeeId || 'usr-system'
         ).run();
 
         // Dispatch to Google Sheet Webhook if configured
@@ -182,7 +186,7 @@ export default {
               evt.effectiveEventTime,
               evt.wasTimeAdjusted ? 1 : 0,
               evt.adjustmentReason || null,
-              evt.createdUserId || 'usr-emp-001'
+              evt.createdUserId || evt.employeeId || 'usr-system'
             ).run();
             syncedIds.push(evt.id);
           } catch {
@@ -255,6 +259,86 @@ export default {
 
         return new Response(
           JSON.stringify({ success: true, message: 'Password updated successfully' }),
+          { status: 200, headers: corsHeaders }
+        );
+      }
+
+      // 9. Login Authentication API
+      if (path === '/api/auth/login' && request.method === 'POST') {
+        const body: any = await request.json();
+        const username = (body.username || '').trim().toLowerCase();
+        const password = body.password || '';
+
+        if (!username || !password) {
+          return new Response(
+            JSON.stringify({ error: 'Username and password are required' }),
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        // Query user with joined employee profile from D1
+        const userRow: any = await env.DB.prepare(
+          `SELECT u.id as userId, u.username, u.password_hash as passwordHash, u.role,
+                  u.full_name as fullName, u.phone, u.is_active as isActive,
+                  e.id as employeeId, e.employee_code as employeeCode, e.calling_name as callingName,
+                  e.designation, e.current_daily_rate as currentDailyRate, e.current_ot_rate as currentOtRate
+           FROM users u
+           LEFT JOIN employees e ON e.user_id = u.id
+           WHERE LOWER(u.username) = ?`
+        ).bind(username).first();
+
+        if (!userRow) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid username or password' }),
+            { status: 401, headers: corsHeaders }
+          );
+        }
+
+        // Match password (plaintext, simple or salt match)
+        const isMatch =
+          userRow.passwordHash === password ||
+          (userRow.passwordHash && userRow.passwordHash.endsWith(password)) ||
+          (userRow.passwordHash && userRow.passwordHash.includes(`:${password}`));
+
+        if (!isMatch) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid username or password' }),
+            { status: 401, headers: corsHeaders }
+          );
+        }
+
+        if (!userRow.isActive) {
+          return new Response(
+            JSON.stringify({ error: 'This account has been deactivated. Please contact HR.' }),
+            { status: 403, headers: corsHeaders }
+          );
+        }
+
+        const user = {
+          id: userRow.userId,
+          username: userRow.username,
+          role: userRow.role,
+          fullName: userRow.fullName,
+          phone: userRow.phone,
+          isActive: Boolean(userRow.isActive),
+        };
+
+        const employee = userRow.employeeId
+          ? {
+              id: userRow.employeeId,
+              userId: userRow.userId,
+              employeeCode: userRow.employeeCode,
+              fullName: userRow.fullName,
+              callingName: userRow.callingName || (userRow.fullName ? userRow.fullName.split(' ')[0] : userRow.username),
+              designation: userRow.designation || 'Site Worker',
+              currentDailyRate: userRow.currentDailyRate ?? 2000,
+              currentOtRate: userRow.currentOtRate ?? 300,
+              isActive: true,
+            }
+          : null;
+
+        return new Response(
+          JSON.stringify({ success: true, user, employee }),
           { status: 200, headers: corsHeaders }
         );
       }

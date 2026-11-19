@@ -117,7 +117,7 @@ export function App() {
     // 2. Persist to Cloudflare Worker D1 and Google Sheet
     const emp = employees.find((e) => e.id === event.employeeId);
     const site = sites.find((s) => s.id === event.siteId);
-    await apiRecordAttendance(event, emp?.fullName, site?.name);
+    await apiRecordAttendance(event, emp?.fullName || event.employeeName, site?.name || event.siteName);
   };
 
   const handleCorrectOff = async (sessionGroupId: string, newOffDate: string, newOffTime: string, reason: string) => {
@@ -140,9 +140,10 @@ export function App() {
     setAttendanceEvents(updated);
     saveLocalAttendanceEvents(updated);
     if (targetEvent) {
-      const emp = employees.find((e) => e.id === targetEvent!.employeeId);
-      const site = sites.find((s) => s.id === targetEvent!.siteId);
-      await apiRecordAttendance(targetEvent, emp?.fullName, site?.name);
+      const finalTarget: AttendanceEvent = targetEvent;
+      const emp = employees.find((e) => e.id === finalTarget.employeeId);
+      const site = sites.find((s) => s.id === finalTarget.siteId);
+      await apiRecordAttendance(finalTarget, emp?.fullName || finalTarget.employeeName, site?.name || finalTarget.siteName);
     }
   };
 
@@ -205,21 +206,32 @@ export function App() {
   // If logged in as an EMPLOYEE:
   // Render ONLY EmployeeDashboard. Strict role boundary: NO HR/CEO/Admin views or switcher!
   if (currentUser.role === 'EMPLOYEE') {
-    const activeEmployee =
+    const matchedEmployee =
       employees.find((e) => e.userId === currentUser.id) ||
-      employees.find((e) => e.fullName?.toLowerCase() === currentUser.fullName?.toLowerCase()) ||
-      employees[0] ||
-      {
-        id: `emp-${currentUser.id}`,
-        userId: currentUser.id,
-        employeeCode: 'CNW-EMP',
-        fullName: currentUser.fullName || 'Employee',
-        callingName: (currentUser.fullName || 'Employee').split(' ')[0],
-        designation: 'Site Worker',
-        currentDailyRate: 2000,
-        currentOtRate: 300,
-        isActive: true,
-      };
+      employees.find(
+        (e) =>
+          Boolean(e.fullName) &&
+          Boolean(currentUser.fullName) &&
+          e.fullName.trim().toLowerCase() === currentUser.fullName.trim().toLowerCase()
+      ) ||
+      employees.find(
+        (e) =>
+          Boolean(e.callingName) &&
+          Boolean(currentUser.username) &&
+          e.callingName.trim().toLowerCase() === currentUser.username.trim().toLowerCase()
+      );
+
+    const activeEmployee: Employee = matchedEmployee || {
+      id: `emp-${currentUser.id}`,
+      userId: currentUser.id,
+      employeeCode: `CNW-E${currentUser.id.slice(-3)}`,
+      fullName: currentUser.fullName || currentUser.username,
+      callingName: (currentUser.fullName || currentUser.username).split(' ')[0],
+      designation: 'Site Worker',
+      currentDailyRate: 2000,
+      currentOtRate: 300,
+      isActive: true,
+    };
 
     return (
       <EmployeeDashboard

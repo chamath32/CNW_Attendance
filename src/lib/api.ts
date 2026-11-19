@@ -1,4 +1,4 @@
-import { AttendanceEvent, Site, Employee } from '../types';
+import { AttendanceEvent, Site, Employee, User } from '../types';
 
 const STORAGE_KEY_EVENTS = 'cnw_attendance_events';
 const STORAGE_KEY_GSHEET_WEBHOOK = 'cnw_google_sheet_webhook';
@@ -22,7 +22,7 @@ export function mapToAttendanceEvent(row: any): AttendanceEvent {
     effectiveEventTime: row.effectiveEventTime || row.effective_event_time,
     wasTimeAdjusted: Boolean(row.wasTimeAdjusted || row.was_time_adjusted),
     adjustmentReason: row.adjustmentReason || row.adjustment_reason || undefined,
-    createdUserId: row.createdUserId || row.created_by_user_id || 'usr-emp-001',
+    createdUserId: row.createdUserId || row.created_by_user_id || row.employeeId || 'usr-system',
     createdAt: row.createdAt || row.created_at || new Date().toISOString(),
   };
 }
@@ -156,13 +156,51 @@ export async function apiRecordAttendance(
 }
 
 /**
+ * Map raw database row (snake_case) or frontend object to Employee
+ */
+export function mapToEmployee(row: any): Employee {
+  return {
+    id: row.id,
+    userId: row.userId || row.user_id || '',
+    employeeCode: row.employeeCode || row.employee_code || 'CNW-EMP',
+    fullName: row.fullName || row.full_name || 'Employee',
+    callingName: row.callingName || row.calling_name || (row.fullName || row.full_name || '').split(' ')[0] || 'Employee',
+    nicNumber: row.nicNumber || row.nic_number || undefined,
+    phone: row.phone || undefined,
+    designation: row.designation || 'Site Worker',
+    currentDailyRate: Number(row.currentDailyRate ?? row.current_daily_rate ?? 2000),
+    currentOtRate: Number(row.currentOtRate ?? row.current_ot_rate ?? 300),
+    isActive: Boolean(row.isActive ?? row.is_active ?? true),
+  };
+}
+
+/**
+ * Map raw database row (snake_case) or frontend object to Site
+ */
+export function mapToSite(row: any): Site {
+  return {
+    id: row.id,
+    siteCode: row.siteCode || row.site_code || 'CNW-S01',
+    name: row.name,
+    location: row.location,
+    address: row.address || undefined,
+    contactPerson: row.contactPerson || row.contact_person || undefined,
+    contactPhone: row.contactPhone || row.contact_phone || undefined,
+    isActive: Boolean(row.isActive ?? row.is_active ?? true),
+  };
+}
+
+/**
  * Fetch sites from Cloudflare D1
  */
 export async function apiFetchSites(): Promise<Site[] | null> {
   try {
     const res = await fetch('/api/sites');
     if (res.ok) {
-      return await res.json();
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        return data.map(mapToSite);
+      }
     }
   } catch {
     // fallback
@@ -177,7 +215,38 @@ export async function apiFetchEmployees(): Promise<Employee[] | null> {
   try {
     const res = await fetch('/api/employees');
     if (res.ok) {
-      return await res.json();
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        return data.map(mapToEmployee);
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return null;
+}
+
+/**
+ * Authenticate against Cloudflare Worker D1 backend
+ */
+export async function apiLogin(
+  username: string,
+  password: string
+): Promise<{ user: User; employee: Employee | null } | null> {
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.user) {
+        return {
+          user: data.user,
+          employee: data.employee ? mapToEmployee(data.employee) : null,
+        };
+      }
     }
   } catch {
     // fallback

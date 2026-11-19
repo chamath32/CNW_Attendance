@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User, Employee } from '../types';
 import { Lock, User as UserIcon, LogIn, AlertCircle, UserPlus, Phone, Briefcase } from 'lucide-react';
+import { apiLogin } from '../lib/api';
 
 interface LoginPageProps {
   onLoginSuccess: (user: User) => void;
@@ -59,11 +60,36 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onEmployee
   const [signUpPassword, setSignUpPassword] = useState<string>('');
 
   // Handle Login
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    // Check seed users, registered users, and custom updated passwords
+    // 1. Authenticate against Cloudflare D1 Backend
+    const backendResult = await apiLogin(username.trim(), password);
+    if (backendResult) {
+      if (rememberMe) {
+        localStorage.setItem('cnw_active_session', JSON.stringify(backendResult.user));
+      } else {
+        sessionStorage.setItem('cnw_active_session', JSON.stringify(backendResult.user));
+      }
+
+      if (backendResult.employee) {
+        // Cache employee profile locally
+        const existing: Employee[] = JSON.parse(localStorage.getItem('cnw_employees_list') || '[]');
+        const idx = existing.findIndex((emp) => emp.id === backendResult.employee!.id);
+        if (idx >= 0) existing[idx] = backendResult.employee;
+        else existing.push(backendResult.employee);
+        localStorage.setItem('cnw_employees_list', JSON.stringify(existing));
+        if (onEmployeeCreated) {
+          onEmployeeCreated(backendResult.employee);
+        }
+      }
+
+      onLoginSuccess(backendResult.user);
+      return;
+    }
+
+    // 2. Fallback to local / seed users (offline / dev fallback)
     const customPasswords: Record<string, string> = JSON.parse(
       localStorage.getItem('cnw_custom_passwords') || '{}'
     );
